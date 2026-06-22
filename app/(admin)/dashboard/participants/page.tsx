@@ -16,16 +16,11 @@ export default function ParticipantsPage() {
   const [search, setSearch] = useState('')
 
   useEffect(() => {
-    fetch('/api/learners')
-      .then((r) => r.json())
-      .then((d) => setLearners(d.learners || []))
-      .finally(() => setLoading(false))
+    fetch('/api/learners').then((r) => r.json()).then((d) => setLearners(d.learners || [])).finally(() => setLoading(false))
   }, [])
 
   const filtered = learners.filter(
-    (l) =>
-      l.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      l.phone.includes(search)
+    (l) => l.full_name.toLowerCase().includes(search.toLowerCase()) || l.phone.includes(search)
   )
 
   async function exportCSV() {
@@ -41,11 +36,9 @@ export default function ParticipantsPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Participants</h1>
-        <button
-          onClick={exportCSV}
-          className="text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium px-4 py-2.5 rounded-xl transition-colors"
-        >
+        <h1 className="font-headline text-headline-md text-on-surface">Participants</h1>
+        <button onClick={exportCSV}
+          className="btn-outline text-sm px-4 py-2.5">
           ⬇ Export CSV
         </button>
       </div>
@@ -56,51 +49,54 @@ export default function ParticipantsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name or phone…"
-          className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ambani-400 max-w-sm"
+          className="field max-w-xs"
         />
       </div>
 
       {loading ? (
         <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
+          {[...Array(5)].map((_, i) => <div key={i} className="card h-16 animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-20">
           <div className="text-5xl mb-3">👥</div>
-          <p>{search ? 'No participants match your search.' : 'No participants yet.'}</p>
+          <p className="text-on-surface-variant text-body-md">
+            {search ? 'No participants match your search.' : 'No participants yet.'}
+          </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-surface-low border-b border-surface-high">
                 <tr>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Phone</th>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Language</th>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Enrolled</th>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Lessons</th>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Avg Score</th>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Joined</th>
-                  <th className="text-left px-4 py-3"></th>
+                  {['Name', 'Phone', 'Language', 'Enrolled', 'Lessons', 'Avg Score', 'Joined', ''].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-label-md text-on-surface-variant font-semibold">{h}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-surface-high">
                 {filtered.map((l) => (
-                  <tr key={l.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">{l.full_name}</td>
-                    <td className="px-4 py-3 text-gray-600">{l.phone}</td>
+                  <tr key={l.id} className="hover:bg-surface-low/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-on-surface">{l.full_name}</td>
+                    <td className="px-4 py-3 text-on-surface-variant">{l.phone}</td>
                     <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">
                         {l.language_pref === 'zu' ? 'isiZulu' : 'English'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{l.enrollments_count}</td>
-                    <td className="px-4 py-3 text-gray-600">{l.completed_lessons}</td>
-                    <td className="px-4 py-3 text-gray-600">{l.avg_score > 0 ? `${l.avg_score}%` : '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">{formatDate(l.created_at)}</td>
+                    <td className="px-4 py-3 text-on-surface-variant">{l.enrollments_count}</td>
+                    <td className="px-4 py-3 text-on-surface-variant">{l.completed_lessons}</td>
                     <td className="px-4 py-3">
-                      <Link href={`/dashboard/participants/${l.id}`} className="text-ambani-600 hover:text-ambani-700 font-medium">
+                      {l.avg_score > 0 ? (
+                        <span className={`font-semibold ${l.avg_score >= 80 ? 'text-tertiary' : l.avg_score >= 60 ? 'text-secondary' : 'text-error'}`}>
+                          {l.avg_score}%
+                        </span>
+                      ) : <span className="text-on-surface-variant">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-on-surface-variant">{formatDate(l.created_at)}</td>
+                    <td className="px-4 py-3">
+                      <Link href={`/dashboard/participants/${l.id}`} className="text-primary font-semibold hover:text-primary-dark text-sm">
                         View →
                       </Link>
                     </td>
@@ -109,7 +105,7 @@ export default function ParticipantsPage() {
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-400">
+          <div className="px-5 py-3 border-t border-surface-high bg-surface-low text-xs text-on-surface-variant">
             {filtered.length} participant{filtered.length !== 1 ? 's' : ''}
           </div>
         </div>

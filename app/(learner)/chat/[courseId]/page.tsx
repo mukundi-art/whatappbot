@@ -2,9 +2,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getLearnerFromStorage, sleep } from '@/lib/utils'
-import type { ChatMessage, QuizQuestion, Lesson, Module, LessonContent, Quiz } from '@/lib/supabase/types'
+import type { ChatMessage, QuizQuestion, Lesson, LessonContent, Quiz } from '@/lib/supabase/types'
 
 type MessageType = 'bot' | 'learner' | 'video' | 'quiz-question' | 'quiz-result' | 'typing'
+type Language = 'en' | 'zu'
 
 interface DisplayMessage {
   id: string
@@ -17,38 +18,40 @@ interface DisplayMessage {
   answerIndex?: number
 }
 
-type Language = 'en' | 'zu'
-
-const UI_TEXT: Record<Language, Record<string, string>> = {
+const UI: Record<Language, Record<string, string>> = {
   en: {
-    loading: 'Loading your lesson…',
-    course_done: '🎉 You\'ve completed this course! Great work!',
-    back: 'Back to courses',
-    lesson_complete: 'Lesson complete!',
-    score: 'Your score',
-    next_lesson: 'Next lesson →',
-    correct: '✅ Correct!',
-    wrong: '❌ Not quite.',
-    video_watch: 'Watch the video above, then we\'ll continue.',
-    watch_prompt: '▶ Tap to play video',
-    quiz_intro: 'Quick check! Let\'s see what you learned. Answer these questions:',
-    all_done: 'All done! You scored',
-    out_of: 'out of',
+    loading:      'Loading your lesson…',
+    course_done:  "🎉 You've completed this course! Great work!",
+    back:         'Back to courses',
+    video_watch:  'Watch the video above, then tap the button below to continue.',
+    video_done:   'I watched the video — continue →',
+    quiz_intro:   "Quick check! Let's see what you learned:",
+    correct:      '✅ Correct!',
+    wrong:        '❌ Not quite.',
+    all_done:     'You scored',
+    out_of:       'out of',
+    next_lesson:  'Next lesson →',
+    finish:       '🏁 Finish course',
+    done_pct_80:  '🌟 Excellent!',
+    done_pct_60:  '👍 Good job!',
+    done_pct_0:   '💪 Keep practising!',
   },
   zu: {
-    loading: 'Silanda isifundo sakho…',
-    course_done: '🎉 Uqedile lo msebenzi! Umsebenzi omuhle kakhulu!',
-    back: 'Buyela emasifundweni',
-    lesson_complete: 'Isifundo siphelile!',
-    score: 'Amapointi akho',
-    next_lesson: 'Isifundo esilandelayo →',
-    correct: '✅ Kulungile!',
-    wrong: '❌ Akukho khona.',
-    video_watch: 'Buka ividiyo elingenhla, bese siqhubeka.',
-    watch_prompt: '▶ Thepha ukudlala ividiyo',
-    quiz_intro: 'Hlola ulwazi lwakho! Phendula lemibuzo:',
-    all_done: 'Uqedile! Uthole',
-    out_of: 'phakathi kwa-',
+    loading:      'Silanda isifundo sakho…',
+    course_done:  '🎉 Uqedile lo msebenzi! Umsebenzi omuhle kakhulu!',
+    back:         'Buyela emasifundweni',
+    video_watch:  'Buka ividiyo elingenhla, bese uthepha inkinobho engezansi ukuze uqhubeke.',
+    video_done:   'Ngibukile ividiyo — qhubeka →',
+    quiz_intro:   'Hlola ulwazi lwakho! Phendula lemibuzo:',
+    correct:      '✅ Kulungile!',
+    wrong:        '❌ Akukho khona.',
+    all_done:     'Uthole',
+    out_of:       'phakathi kwa-',
+    next_lesson:  'Isifundo esilandelayo →',
+    finish:       '🏁 Qeda isifundo',
+    done_pct_80:  '🌟 Kuhle kakhulu!',
+    done_pct_60:  '👍 Umsebenzi omuhle!',
+    done_pct_0:   '💪 Qhubeka uzijwayeze!',
   },
 }
 
@@ -68,42 +71,34 @@ export default function ChatPage() {
   const [quizIndex, setQuizIndex] = useState(0)
   const [answers, setAnswers] = useState<number[]>([])
   const [score, setScore] = useState(0)
-  const [processing, setProcessing] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
   const [courseTitle, setCourseTitle] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
-  const ui = UI_TEXT[language]
+  const ui = UI[language]
 
-  const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping])
 
-  useEffect(() => { scrollToBottom() }, [messages, isTyping])
-
-  // Load learner + course data
   useEffect(() => {
     const l = getLearnerFromStorage()
     if (!l) { router.replace('/register'); return }
     setLearner(l)
-    setLanguage((l.language || 'en') as Language)
+    if (l) setLanguage((l.language || 'en') as Language)
 
     async function load() {
       try {
-        // Fetch course
-        const cr = await fetch(`/api/courses/${courseId}`)
+        const [cr, lr] = await Promise.all([
+          fetch(`/api/courses/${courseId}`),
+          fetch(`/api/courses/${courseId}/lessons`),
+        ])
         const cd = await cr.json()
-        if (cd.course) setCourseTitle(cd.course.title)
-
-        // Fetch all lessons for this course
-        const lr = await fetch(`/api/courses/${courseId}/lessons`)
         const ld = await lr.json()
+        if (cd.course) setCourseTitle(cd.course.title)
         const fetchedLessons: (Lesson & { module_title?: string })[] = ld.lessons || []
         setLessons(fetchedLessons)
-
         if (fetchedLessons.length > 0 && l) {
-          await loadLesson(fetchedLessons[0], 0, l.language as Language)
+          await loadLesson(fetchedLessons[0], 0, (l.language || 'en') as Language)
         } else {
           setPageLoading(false)
         }
@@ -115,18 +110,15 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId])
 
-  const addMessage = (msg: Omit<DisplayMessage, 'timestamp'>) => {
+  const addMessage = (msg: Omit<DisplayMessage, 'timestamp'>) =>
     setMessages((prev) => [...prev, { ...msg, timestamp: new Date() }])
-  }
 
-  const loadLesson = useCallback(async (lesson: Lesson & { module_title?: string }, idx: number, lang: string) => {
-    setProcessing(true)
+  const loadLesson = useCallback(async (lesson: Lesson & { module_title?: string }, idx: number, lang: Language) => {
     setPhase('chat')
     setQuizIndex(0)
     setAnswers([])
     setScore(0)
 
-    // Track progress
     const learnerData = getLearnerFromStorage()
     if (learnerData) {
       fetch('/api/progress', {
@@ -137,44 +129,34 @@ export default function ChatPage() {
     }
 
     try {
-      // Fetch content
       const [contentRes, quizRes] = await Promise.all([
         fetch(`/api/lessons/${lesson.id}/content?language=${lang}`),
         fetch(`/api/lessons/${lesson.id}/quiz?language=${lang}`),
       ])
       const contentData = await contentRes.json()
       const quizData = await quizRes.json()
-
       setCurrentContent(contentData.content || null)
       setCurrentQuiz(quizData.quiz || null)
-
       setPageLoading(false)
 
-      // If module changed, show module title
-      if (idx === 0 || lesson.module_title) {
-        addMessage({
-          id: `module-${idx}`,
-          type: 'bot',
-          text: `📌 *${lesson.module_title || ''}* — ${lesson.title}`,
-        })
+      if (lesson.module_title) {
+        addMessage({ id: `mod-${idx}`, type: 'bot', text: `📌 ${lesson.module_title} — ${lesson.title}` })
         await sleep(600)
       }
 
-      // Play chat script
       const script: ChatMessage[] = contentData.content?.chat_script || []
       if (script.length === 0) {
-        addMessage({ id: 'no-content', type: 'bot', text: 'This lesson is coming soon! Check back later.' })
+        addMessage({ id: 'no-content', type: 'bot', text: 'This lesson is coming soon!' })
       } else {
         for (const msg of script) {
           setIsTyping(true)
-          await sleep(msg.delay || 1200)
+          await sleep(Math.min(msg.delay || 1200, 2000))
           setIsTyping(false)
           addMessage({ id: `chat-${msg.id}`, type: 'bot', text: msg.text })
-          await sleep(300)
+          await sleep(200)
         }
       }
 
-      // Show video if available
       if (lesson.video_url) {
         setIsTyping(true)
         await sleep(800)
@@ -183,36 +165,24 @@ export default function ChatPage() {
         addMessage({ id: `video-prompt-${lesson.id}`, type: 'bot', text: ui.video_watch })
         setPhase('video')
       } else {
-        // No video — go straight to quiz
         await startQuiz(quizData.quiz)
       }
-    } catch (err) {
-      console.error(err)
+    } catch {
       addMessage({ id: 'error', type: 'bot', text: 'Something went wrong loading this lesson. Please try again.' })
-    } finally {
-      setProcessing(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui])
 
   async function startQuiz(quiz: Quiz | null) {
-    if (!quiz || quiz.questions.length === 0) {
-      showLessonComplete()
-      return
-    }
+    if (!quiz || quiz.questions.length === 0) { setPhase('result'); return }
     setIsTyping(true)
     await sleep(800)
     setIsTyping(false)
     addMessage({ id: 'quiz-intro', type: 'bot', text: ui.quiz_intro })
-    await sleep(500)
+    await sleep(400)
     setPhase('quiz')
     setQuizIndex(0)
-    // Show first question
-    addMessage({
-      id: `q-0`,
-      type: 'quiz-question',
-      question: quiz.questions[0],
-    })
+    addMessage({ id: 'q-0', type: 'quiz-question', question: quiz.questions[0] })
   }
 
   async function handleAnswer(optionIndex: number) {
@@ -222,41 +192,26 @@ export default function ChatPage() {
     const newAnswers = [...answers, optionIndex]
     setAnswers(newAnswers)
 
-    // Mark selection visible
-    addMessage({
-      id: `answer-${quizIndex}`,
-      type: 'learner',
-      text: question.options[optionIndex],
-    })
-
-    await sleep(400)
-
-    // Show result
+    addMessage({ id: `answer-${quizIndex}`, type: 'learner', text: question.options[optionIndex] })
+    await sleep(350)
     addMessage({
       id: `result-${quizIndex}`,
       type: 'quiz-result',
       correct: isCorrect,
       text: `${isCorrect ? ui.correct : ui.wrong} ${question.explanation}`,
-      answerIndex: question.correctIndex,
     })
 
     const nextIndex = quizIndex + 1
     if (nextIndex < currentQuiz.questions.length) {
-      await sleep(800)
+      await sleep(700)
       setQuizIndex(nextIndex)
-      addMessage({
-        id: `q-${nextIndex}`,
-        type: 'quiz-question',
-        question: currentQuiz.questions[nextIndex],
-      })
+      addMessage({ id: `q-${nextIndex}`, type: 'quiz-question', question: currentQuiz.questions[nextIndex] })
     } else {
-      // All questions done
       const correct = newAnswers.filter((a, i) => a === currentQuiz.questions[i]?.correctIndex).length
-      const finalScore = Math.round((correct / currentQuiz.questions.length) * 100)
-      setScore(finalScore)
-      await sleep(800)
+      const pct = Math.round((correct / currentQuiz.questions.length) * 100)
+      setScore(pct)
+      await sleep(700)
 
-      // Save attempt
       const learnerData = getLearnerFromStorage()
       if (learnerData) {
         fetch('/api/quiz-attempts', {
@@ -272,17 +227,14 @@ export default function ChatPage() {
         }).catch(() => {})
       }
 
+      const emoji = pct >= 80 ? ui.done_pct_80 : pct >= 60 ? ui.done_pct_60 : ui.done_pct_0
       addMessage({
         id: 'final-score',
         type: 'bot',
-        text: `${ui.all_done} ${correct} ${ui.out_of} ${currentQuiz.questions.length}! ${finalScore >= 80 ? '🌟 Excellent!' : finalScore >= 60 ? '👍 Good job!' : '💪 Keep practising!'}`,
+        text: `${ui.all_done} ${correct} ${ui.out_of} ${currentQuiz.questions.length}! ${emoji}`,
       })
       setPhase('result')
     }
-  }
-
-  function showLessonComplete() {
-    setPhase('result')
   }
 
   async function nextLesson() {
@@ -293,7 +245,7 @@ export default function ChatPage() {
       return
     }
     setCurrentLessonIndex(nextIndex)
-    setMessages([]) // clear for next lesson
+    setMessages([])
     await loadLesson(lessons[nextIndex], nextIndex, language)
   }
 
@@ -314,87 +266,85 @@ export default function ChatPage() {
 
   if (pageLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-ambani-50">
-        <div className="text-ambani-600 animate-pulse">{ui.loading}</div>
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <div className="text-primary text-body-md animate-pulse">{ui.loading}</div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-gray-100">
-      {/* Chat header */}
-      <div className="bg-chat-700 text-white flex items-center gap-3 px-4 py-3 shadow-md z-10">
-        <button onClick={() => router.push('/courses')} className="text-white/80 hover:text-white text-xl">←</button>
-        <div className="w-10 h-10 rounded-full bg-ambani-400 flex items-center justify-center text-white font-bold text-lg">A</div>
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold truncate">{courseTitle || 'Ambani Learn'}</div>
-          <div className="text-xs text-chat-200 truncate">
-            {lessons[currentLessonIndex]?.title || 'Ambani Learn Bot'}
-          </div>
+    <div className="flex flex-col h-screen max-h-screen bg-surface">
+      {/* Chat header — deep teal */}
+      <div className="bg-primary text-white flex items-center gap-3 px-4 py-3 shadow-md z-10">
+        <button onClick={() => router.push('/courses')} className="text-white/70 hover:text-white text-xl leading-none">←</button>
+        <div className="w-10 h-10 rounded-full bg-secondary-light flex items-center justify-center font-headline font-bold text-primary text-lg shrink-0">
+          A
         </div>
-        <div className="text-right text-xs text-chat-200 shrink-0">
-          <div>{progress}%</div>
-          <div className="text-chat-300">done</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-headline font-semibold text-sm truncate">{courseTitle || 'Ambani Learn'}</div>
+          <div className="text-xs text-white/60 truncate">{lessons[currentLessonIndex]?.title || 'Ambani Learn Bot'}</div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-secondary-light font-semibold text-sm">{progress}%</div>
+          <div className="text-xs text-white/50">complete</div>
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-1 bg-chat-900">
+      {/* Sunset orange progress bar */}
+      <div className="h-1.5 bg-primary-dark">
         <div
-          className="h-full bg-ambani-400 transition-all duration-500"
+          className="h-full bg-secondary-light transition-all duration-500"
           style={{ width: `${progress}%` }}
         />
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto chat-bg px-3 py-4 space-y-2">
+      <div className="flex-1 overflow-y-auto chat-bg px-3 py-4 space-y-2.5 scrollbar-hide">
         {messages.map((msg) => (
-          <MessageItem key={msg.id} msg={msg} onAnswer={handleAnswer} phase={phase} quizIndex={quizIndex} />
+          <ChatMessage
+            key={msg.id}
+            msg={msg}
+            onAnswer={handleAnswer}
+            phase={phase}
+            quizIndex={quizIndex}
+          />
         ))}
 
+        {/* Typing indicator */}
         {isTyping && (
           <div className="flex items-end gap-2 animate-fade-in">
-            <div className="w-8 h-8 rounded-full bg-ambani-400 flex items-center justify-center text-white text-sm font-bold shrink-0">A</div>
-            <div className="bg-white rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 rounded-full bg-gray-400 dot-typing" />
-                <div className="w-2 h-2 rounded-full bg-gray-400 dot-typing" />
-                <div className="w-2 h-2 rounded-full bg-gray-400 dot-typing" />
+            <Avatar />
+            <div className="bg-chat-bot border border-outline-variant rounded-2xl rounded-bl-sm px-4 py-3 shadow-card">
+              <div className="flex gap-1 items-center h-4">
+                <span className="w-2 h-2 rounded-full bg-outline dot-typing" />
+                <span className="w-2 h-2 rounded-full bg-outline dot-typing" />
+                <span className="w-2 h-2 rounded-full bg-outline dot-typing" />
               </div>
             </div>
           </div>
         )}
 
-        {/* Video continue button */}
-        {phase === 'video' && !processing && (
-          <div className="flex justify-center mt-4">
-            <button
-              onClick={videoWatched}
-              className="bg-chat-600 hover:bg-chat-700 text-white font-semibold px-6 py-3 rounded-xl shadow transition-colors"
-            >
-              I watched the video — continue →
+        {/* Video continue */}
+        {phase === 'video' && (
+          <div className="flex justify-center mt-2">
+            <button onClick={videoWatched} className="btn-primary px-8 shadow-btn">
+              {ui.video_done}
             </button>
           </div>
         )}
 
-        {/* Next lesson / done */}
+        {/* Next / finish */}
         {phase === 'result' && (
-          <div className="flex justify-center mt-4">
-            <button
-              onClick={nextLesson}
-              className="bg-ambani-500 hover:bg-ambani-600 text-white font-semibold px-6 py-3 rounded-xl shadow transition-colors"
-            >
-              {currentLessonIndex + 1 < lessons.length ? ui.next_lesson : '🏁 Finish course'}
+          <div className="flex justify-center mt-2">
+            <button onClick={nextLesson} className="btn-primary px-8 shadow-btn">
+              {currentLessonIndex + 1 < lessons.length ? ui.next_lesson : ui.finish}
             </button>
           </div>
         )}
 
         {phase === 'done' && (
-          <div className="flex justify-center mt-4">
-            <button
-              onClick={() => router.push('/courses')}
-              className="bg-ambani-500 hover:bg-ambani-600 text-white font-semibold px-6 py-3 rounded-xl shadow transition-colors"
-            >
+          <div className="flex justify-center mt-2">
+            <button onClick={() => router.push('/courses')} className="btn-primary px-8 shadow-btn">
               {ui.back}
             </button>
           </div>
@@ -406,7 +356,15 @@ export default function ChatPage() {
   )
 }
 
-function MessageItem({
+function Avatar() {
+  return (
+    <div className="w-8 h-8 rounded-full bg-secondary-light flex items-center justify-center font-headline font-bold text-primary text-sm shrink-0">
+      A
+    </div>
+  )
+}
+
+function ChatMessage({
   msg,
   onAnswer,
   phase,
@@ -417,15 +375,17 @@ function MessageItem({
   phase: string
   quizIndex: number
 }) {
-  const isLastQuestion = msg.type === 'quiz-question' && msg.id === `q-${quizIndex}` && phase === 'quiz'
+  const time = msg.timestamp.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })
+  const isActiveQuestion = msg.type === 'quiz-question' && msg.id === `q-${quizIndex}` && phase === 'quiz'
 
   if (msg.type === 'bot') {
     return (
-      <div className="flex items-end gap-2 animate-slide-in-left">
-        <div className="w-8 h-8 rounded-full bg-ambani-400 flex items-center justify-center text-white text-sm font-bold shrink-0">A</div>
-        <div className="max-w-[78%] bg-white rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-sm">
-          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-          <p className="text-xs text-gray-400 mt-1 text-right">{msg.timestamp.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}</p>
+      <div className="flex items-end gap-2 animate-slide-in-left max-w-[85%]">
+        <Avatar />
+        {/* Bot bubble: white with teal left accent border */}
+        <div className="bg-chat-bot border-l-4 border-primary rounded-2xl rounded-bl-sm px-4 py-3 shadow-card">
+          <p className="text-chat-bubble text-on-surface whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+          <p className="text-xs text-outline mt-1.5 text-right">{time}</p>
         </div>
       </div>
     )
@@ -434,9 +394,10 @@ function MessageItem({
   if (msg.type === 'learner') {
     return (
       <div className="flex justify-end animate-slide-in-right">
-        <div className="max-w-[78%] bg-chat-500 text-white rounded-2xl rounded-br-sm px-4 py-2.5 shadow-sm">
-          <p className="text-sm">{msg.text}</p>
-          <p className="text-xs text-chat-200 mt-1 text-right">{msg.timestamp.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}</p>
+        {/* User bubble: light teal (#ccf2f0 ≈ chat-user) with sharp bottom-right */}
+        <div className="max-w-[78%] bg-chat-user rounded-2xl rounded-br-sm px-4 py-3 shadow-card">
+          <p className="text-chat-bubble text-on-surface">{msg.text}</p>
+          <p className="text-xs text-outline mt-1.5 text-right">{time}</p>
         </div>
       </div>
     )
@@ -444,15 +405,10 @@ function MessageItem({
 
   if (msg.type === 'video' && msg.videoUrl) {
     return (
-      <div className="flex items-end gap-2 animate-slide-in-left">
-        <div className="w-8 h-8 rounded-full bg-ambani-400 flex items-center justify-center text-white text-sm font-bold shrink-0">A</div>
-        <div className="max-w-[85%] bg-white rounded-2xl rounded-bl-sm overflow-hidden shadow-sm">
-          <video
-            controls
-            className="w-full max-h-52 object-contain bg-black"
-            preload="metadata"
-            onEnded={() => {}}
-          >
+      <div className="flex items-end gap-2 animate-slide-in-left max-w-[90%]">
+        <Avatar />
+        <div className="flex-1 bg-chat-bot border border-outline-variant rounded-2xl rounded-bl-sm overflow-hidden shadow-card">
+          <video controls className="w-full max-h-56 object-contain bg-black" preload="metadata">
             <source src={msg.videoUrl} />
             Your browser does not support video.
           </video>
@@ -464,20 +420,23 @@ function MessageItem({
   if (msg.type === 'quiz-question' && msg.question) {
     return (
       <div className="flex items-end gap-2 animate-slide-in-left">
-        <div className="w-8 h-8 rounded-full bg-ambani-400 flex items-center justify-center text-white text-sm font-bold shrink-0">A</div>
+        <Avatar />
         <div className="max-w-[85%] space-y-2">
-          <div className="bg-white rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-sm">
-            <p className="text-sm font-medium text-gray-800">{msg.question.question}</p>
+          <div className="bg-chat-bot border-l-4 border-secondary-light rounded-2xl rounded-bl-sm px-4 py-3 shadow-card">
+            <p className="text-chat-bubble font-semibold text-on-surface">{msg.question.question}</p>
           </div>
-          {isLastQuestion && (
+          {isActiveQuestion && (
             <div className="space-y-2 pl-1">
               {msg.question.options.map((opt, i) => (
                 <button
                   key={i}
                   onClick={() => onAnswer(i)}
-                  className="block w-full text-left text-sm bg-white hover:bg-ambani-50 border-2 border-gray-200 hover:border-ambani-400 text-gray-700 px-4 py-2.5 rounded-xl shadow-sm transition-all active:scale-95"
+                  className="block w-full text-left text-sm bg-surface-lowest hover:bg-primary/5
+                             border-2 border-outline-variant hover:border-primary
+                             text-on-surface px-4 py-3 rounded-xl shadow-card
+                             transition-all active:scale-[0.98]"
                 >
-                  <span className="font-semibold text-ambani-600 mr-2">{String.fromCharCode(65 + i)}.</span>
+                  <span className="font-semibold text-primary mr-2">{String.fromCharCode(65 + i)}.</span>
                   {opt}
                 </button>
               ))}
@@ -490,10 +449,14 @@ function MessageItem({
 
   if (msg.type === 'quiz-result') {
     return (
-      <div className="flex items-end gap-2 animate-slide-in-left">
-        <div className="w-8 h-8 rounded-full bg-ambani-400 flex items-center justify-center text-white text-sm font-bold shrink-0">A</div>
-        <div className={`max-w-[78%] rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-sm ${msg.correct ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-          <p className="text-sm text-gray-800">{msg.text}</p>
+      <div className="flex items-end gap-2 animate-slide-in-left max-w-[85%]">
+        <Avatar />
+        <div className={`rounded-2xl rounded-bl-sm px-4 py-3 shadow-card ${
+          msg.correct
+            ? 'bg-tertiary-on-container/10 border border-tertiary/30'
+            : 'bg-error-container/60 border border-error/20'
+        }`}>
+          <p className="text-chat-bubble text-on-surface">{msg.text}</p>
         </div>
       </div>
     )

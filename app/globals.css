@@ -5,21 +5,50 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    background-color: #f9f9ff;
   }
   body {
-    @apply bg-gray-50 text-gray-900;
+    color: #151c27;
+    background-color: #f9f9ff;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Lexend', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  /* Primary button */
+  .btn-primary {
+    @apply bg-primary text-white font-semibold px-6 py-3 rounded-xl transition-all
+           hover:bg-primary-dark active:scale-95 disabled:opacity-50
+           min-h-[48px] flex items-center justify-center;
+  }
+  /* Secondary / outline button */
+  .btn-outline {
+    @apply border-2 border-primary text-primary font-semibold px-6 py-3 rounded-xl
+           transition-all hover:bg-surface-low active:scale-95 disabled:opacity-50
+           min-h-[48px] flex items-center justify-center;
+  }
+  /* Form input */
+  .field {
+    @apply w-full border border-outline-variant rounded-lg px-4 py-3 text-body-md
+           bg-surface-lowest focus:outline-none focus:border-primary focus:ring-2
+           focus:ring-primary/20 transition-colors placeholder:text-outline;
+  }
+  /* Card */
+  .card {
+    @apply bg-surface-lowest rounded-xl border border-surface-high shadow-card;
   }
 }
 
 @layer utilities {
+  /* WhatsApp-style chat wallpaper */
   .chat-bg {
-    background-color: #e5ddd5;
-    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c7bfb7' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    background-color: #e7eefe;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23bcc9c6' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   }
 
-  .dot-typing {
-    animation: bounce-dot 1.4s infinite ease-in-out both;
-  }
+  .dot-typing { animation: bounceDot 1.4s infinite ease-in-out both; }
   .dot-typing:nth-child(1) { animation-delay: -0.32s; }
   .dot-typing:nth-child(2) { animation-delay: -0.16s; }
 
@@ -27,7 +56,7 @@
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-@keyframes bounce-dot {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+@keyframes bounceDot {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.4; }
+  40%           { transform: scale(1); opacity: 1; }
 }
